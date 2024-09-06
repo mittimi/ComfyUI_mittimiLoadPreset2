@@ -107,7 +107,7 @@ Use this node when you want to store two parameter_data in an image.
 
 I use this node as follows.  
 
-![Screenshot of LoadSetParametersNode.](/assets/images/007.jpg)  
+![Screenshot of LoadSetParametersNode.](/assets/images/006.jpg)  
 
 Make PromptB independent and set quality system tags to A and C.  
 I made width and height input ports to switch the image's height and width size with a single button.  
