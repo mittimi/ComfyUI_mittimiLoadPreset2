@@ -1,0 +1,16 @@
+CheckpointName = "xxx.safetensors"
+ClipSet = -1
+VAE = "vae-ft-mse-840000-ema-pruned.safetensors"
+PositivePromptA = ""
+PositivePromptB = ""
+PositivePromptC = ""
+NegativePromptA = ""
+NegativePromptB = ""
+NegativePromptC = ""
+Width = 512
+Height = 768
+BatchSize = 1
+Steps = 20
+CFG = 6.0
+SamplerName = "dpmpp_2m"
+Scheduler = "karras"
