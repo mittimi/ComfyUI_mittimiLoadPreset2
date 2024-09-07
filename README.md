@@ -64,6 +64,7 @@ The same specifications apply to negative prompts.
   
 - LoRA supports the A1111WebUI method of writing \<lora:xxx:1.0\>, \<lora:xxx.safetensors:1.0\>, \<lora:folder/xxx:1.0\> in the prompt.  
 However, if you want to maintain compatibility with A1111WebUI, \<lora:xxx:1.0\> is the preferred description.  
+Use slashes (“/”) for path notation, as backslashes (“\”) in the string will cause an error.  
 I would like to support Block Weight in the future, but my understanding has not caught up yet.  
 With [ComfyUI-Custom-Scripts](https://github.com/pythongosssss/ComfyUI-Custom-Scripts) in place, you can use LoRA's input assistant. This makes writing easier.  
 
