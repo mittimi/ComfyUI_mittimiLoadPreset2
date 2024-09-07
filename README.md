@@ -62,8 +62,8 @@ PosPromptA,B,C are finally combined into a single text, clip text encoded, and o
 Commas are not given when merging, so please be sure to anticipate this in your prompts.
 The same specifications apply to negative prompts.
   
-- LoRA supports the A1111WebUI method of writing <lora:xxx:1.0>, <lora:xxx.safetensors:1.0>, <lora:folder/xxx:1.0> in the prompt.  
-However, if you want to maintain compatibility with A1111WebUI, <lora:xxx:1.0> is the preferred description.  
+- LoRA supports the A1111WebUI method of writing \<lora:xxx:1.0\>, \<lora:xxx.safetensors:1.0\>, \<lora:folder/xxx:1.0\> in the prompt.  
+However, if you want to maintain compatibility with A1111WebUI, \<lora:xxx:1.0\> is the preferred description.  
 I would like to support Block Weight in the future, but my understanding has not caught up yet.  
 With [ComfyUI-Custom-Scripts](https://github.com/pythongosssss/ComfyUI-Custom-Scripts) in place, you can use LoRA's input assistant. This makes writing easier.  
 
