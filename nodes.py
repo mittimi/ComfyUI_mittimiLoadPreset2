@@ -2,17 +2,20 @@ import torch
 import toml
 import os
 import comfy.sd
+import comfy.utils
+import comfy.lora
 import folder_paths
 import hashlib
 from server import PromptServer
 from aiohttp import web
-from PIL import Image, ImageOps, ImageSequence, ImageFile
+from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 import numpy as np
 import json
 from comfy.cli_args import args
-from nodes import LoraLoader, CLIPTextEncode
-from .utils import extractLoras
+from nodes import LoraLoader
+
+from .utils import extractLoras, getNewTomlnameExt, load_lora_for_models, runNegpip
 
 
 routes = PromptServer.instance.routes
@@ -33,9 +36,10 @@ vae_new_list.insert(0,"Use_merged_vae")
 
 
 class LoadSetParamMittimi:
-    
+
     def __init__(self):
         self.device = comfy.model_management.intermediate_device()
+        self.loaded_lora = None
     
     @classmethod
     def INPUT_TYPES(s):
@@ -67,9 +71,10 @@ class LoadSetParamMittimi:
     RETURN_NAMES = ("model", "clip", "vae", "positive_prompt", "negative_prompt", "positive_prompt_text", "negative_prompt_text", "Latent", "Steps", "CFG", "sampler_name", "scheduler", "seed", "parameters_data", )
     FUNCTION = "loadAndSettingParameters03"
     CATEGORY = "mittimiTools"
+    NAME = "name"
 
     def loadAndSettingParameters03(self, checkpoint, ClipNum, vae, PosPromptA, PosPromptB, PosPromptC, NegPromptA, NegPromptB, NegPromptC, Width, Height, BatchSize, Steps, CFG, SamplerName, Scheduler, Seed, node_id, preset=[], ):
-
+        
         ckpt_path = folder_paths.get_full_path("checkpoints", checkpoint)
         out3 = comfy.sd.load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, embedding_directory=folder_paths.get_folder_paths("embeddings"))
         re_ckpt = out3[0]
@@ -83,6 +88,8 @@ class LoadSetParamMittimi:
         
         re_clip = out3[1].clone()
         re_clip.clip_layer(ClipNum)
+        
+        re_ckpt, re_clip = runNegpip(self, re_ckpt, re_clip)
         
         if (vae != "Use_merged_vae"):
             vae_path = folder_paths.get_full_path("vae", vae)
@@ -99,8 +106,12 @@ class LoadSetParamMittimi:
         
         if len(poslora):
             for lora in poslora:
-                re_ckpt, re_clip = LoraLoader().load_lora(re_ckpt, re_clip, lora['lora'], lora['strength'], lora['strength'])
-
+                
+                if lora['vector']:
+                    re_ckpt, re_clip, populated_vector = load_lora_for_models(re_ckpt, re_clip, lora['fullpath'], lora['strength'], lora['strength'], Seed, lora['vector'])
+                else:
+                    re_ckpt, re_clip = LoraLoader().load_lora(re_ckpt, re_clip, lora['path'], lora['strength'], lora['strength'])
+                    
         postokens = re_clip.tokenize(postxt)
         negtokens = re_clip.tokenize(negcombtxt)
         posoutput = re_clip.encode_from_tokens(postokens, return_pooled=True, return_dict=True)
@@ -109,10 +120,29 @@ class LoadSetParamMittimi:
         negcond = negoutput.pop("cond")
         
         parameters_data = []
-        parameters_data.append( {'posp':poscombtxt, 'negp':negcombtxt, 'step':Steps, 'sampler':SamplerName, 'scheduler':Scheduler, 'cfg':CFG, 'seed':Seed, 'width':Width, 'height':Height, 'hash':model_hash, 'checkpoint':checkpoint, 'clip':ClipNum, 'vae':vae} )
-
+        parameters_data.append( {
+            'checkpoint':checkpoint, 
+            'hash':model_hash, 
+            'clip':ClipNum, 
+            'vae':vae, 
+            'posA':PosPromptA,
+            'posB':PosPromptB,
+            'posC':PosPromptC,
+            'negA':NegPromptA,
+            'negB':NegPromptB,
+            'negC':NegPromptC,
+            'width':Width, 
+            'height':Height, 
+            'batchsize':BatchSize,
+            'step':Steps, 
+            'cfg':CFG, 
+            'sampler':SamplerName, 
+            'scheduler':Scheduler, 
+            'seed':Seed, 
+            } )
+        
         return(re_ckpt, re_clip, re_vae, [[poscond, posoutput]], [[negcond, negoutput]], postxt, negcombtxt, {"samples":Latent}, Steps, CFG, SamplerName, Scheduler, Seed, parameters_data, )
-
+    
     def handle_my_message(d):
         
         preset_data = ""
@@ -145,7 +175,7 @@ class CombineParamDataMittimi:
             return_param += param2[:]
         
         return(return_param, )
-    
+
 
 class SaveImageParamMittimi:
     def __init__(self):
@@ -174,7 +204,7 @@ class SaveImageParamMittimi:
     OUTPUT_NODE = True
     FUNCTION = "saveimageMittimi"
     CATEGORY = "mittimiTools"
-    
+
     def saveimageMittimi(self, images, filename_prefix, parameters_data=None, prompt=None, extra_pnginfo=None, ):
         
         filename_prefix += self.prefix_append
@@ -196,7 +226,7 @@ class SaveImageParamMittimi:
                     param_counter = 0
                     for pd in parameters_data:
                         if param_counter > 0: parameters_text += "\n\n"
-                        parameters_text += f"{pd['posp']}\nNegative prompt: {pd['negp']}\nSteps: {pd['step']}, Sampler: {pd['sampler']}, Scheduler: {pd['scheduler']}, CFG Scale: {pd['cfg']}, Seed: {pd['seed']+seed_counter}, Size: {pd['width']}x{pd['height']}, Model hash: {pd['hash']}, Model: {pd['checkpoint']}, Clip: {pd['clip']}, VAE: {pd['vae']}"
+                        parameters_text += f"{pd['posA']+pd['posB']+pd['posC']}\nNegative prompt: {pd['negA']+pd['negB']+pd['negC']}\nSteps: {pd['step']}, Sampler: {pd['sampler']}, Scheduler: {pd['scheduler']}, CFG Scale: {pd['cfg']}, Seed: {pd['seed']+seed_counter}, Size: {pd['width']}x{pd['height']}, Model hash: {pd['hash']}, Model: {pd['checkpoint']}, Clip: {pd['clip']}, VAE: {pd['vae']}"
                         param_counter += 1
                     parameters_text += ", Version: ComfyUI"
                     metadata.add_text("parameters", parameters_text)
@@ -221,13 +251,60 @@ class SaveImageParamMittimi:
         return { "ui": { "images": results } }
 
 
+class SaveParamToPresetMittimi:
+    @classmethod
+    def INPUT_TYPES(s):
+
+        savetype_list = ["new save", "overwrite save"]
+
+        return {
+            "required": {
+                "param": ("PDATA", ),
+                "tomlname": ("STRING", {"default": "new_preset"}),
+                "savetype": (savetype_list,),
+            },
+        }
+    RETURN_TYPES = ()
+    OUTPUT_NODE = True
+    FUNCTION = "saveparamtopresetMittimi"
+    CATEGORY = "mittimiTools"
+    
+    def saveparamtopresetMittimi(self, param, tomlname, savetype, ):
+
+        tomltext = f"CheckpointName = \"{param[0]['checkpoint']}\"\n"
+        tomltext += f"ClipSet = {param[0]['clip']}\n"
+        tomltext += f"VAE = \"{param[0]['vae']}\"\n"
+        tomltext += f"PositivePromptA = \"{param[0]['posA']}\"\n"
+        tomltext += f"PositivePromptB = \"{param[0]['posB']}\"\n"
+        tomltext += f"PositivePromptC = \"{param[0]['posC']}\"\n"
+        tomltext += f"NegativePromptA = \"{param[0]['negA']}\"\n"
+        tomltext += f"NegativePromptB = \"{param[0]['negB']}\"\n"
+        tomltext += f"NegativePromptC = \"{param[0]['negC']}\"\n"
+        tomltext += f"Width = {param[0]['width']}\n"
+        tomltext += f"Height = {param[0]['height']}\n"
+        tomltext += f"BatchSize = {param[0]['batchsize']}\n"
+        tomltext += f"Steps = {param[0]['step']}\n"
+        tomltext += f"CFG = {param[0]['cfg']}\n"
+        tomltext += f"SamplerName = \"{param[0]['sampler']}\"\n"
+        tomltext += f"Scheduler = \"{param[0]['scheduler']}\"\n"
+        
+        tomlnameExt = getNewTomlnameExt(tomlname, presets_directory_path, savetype)
+
+        with open(f"{presets_directory_path}/{tomlnameExt}", mode='w') as f:
+            f.write(tomltext)
+
+        return()
+
+
 NODE_CLASS_MAPPINGS = {
     "LoadSetParamMittimi": LoadSetParamMittimi,
     "SaveImageParamMittimi": SaveImageParamMittimi,
     "CombineParamDataMittimi": CombineParamDataMittimi,
+    "SaveParamToPresetMittimi": SaveParamToPresetMittimi,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadSetParamMittimi": "LoadSetParameters",
     "SaveImageParamMittimi": "SaveImageWithParamText",
     "CombineParamDataMittimi": "CombineParamData",
+    "SaveParamToPresetMittimi": "SaveParamToPreset",
 }

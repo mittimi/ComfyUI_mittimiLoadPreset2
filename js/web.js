@@ -1,7 +1,9 @@
 import { ComfyApp, app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
+
 var allow_set_flag = true;
+
 
 app.registerExtension({
 	name: "ComfyUI_mittimiLoadPreset2",
@@ -26,13 +28,16 @@ app.registerExtension({
                 
                 set: (value) => {
                     node._value = value;
+                    console.log("set");
                     if (allow_set_flag) send_message(node.id, value);
                 },
                 get: () => {
                     return node._value;
     			}
     		});
+            
             function messageHandler(event) {
+                
                 if (node.id == event.detail.node) {
                     node.widgets[1].value = (event.detail.message['CheckpointName'])?event.detail.message['CheckpointName']:"no checkpoint";
                     node.widgets[2].value = (event.detail.message['ClipSet'])?event.detail.message['ClipSet']:"-1";
@@ -56,7 +61,7 @@ app.registerExtension({
             api.addEventListener("my.custom.message", messageHandler);
         }
     },
-
+    
     async afterConfigureGraph() {
         allow_set_flag = true;
     }
