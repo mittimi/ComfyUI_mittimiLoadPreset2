@@ -1,7 +1,7 @@
 [project]
 name = "comfyui_mittimi_load_preset2"
 description = "This node can easily switch between models and prompts by saving presets."
-version = "1.0.1"
+version = "1.0.2"
 license = { file = "LICENSE" }
 
 [project.urls]
