@@ -99,8 +99,10 @@ For detailed instructions on how to use Negpip, please visit the aforementioned 
 
 ![Screenshot of LoadSetParametersNode.](/assets/images/004.jpg)  
 
-This node saves images. The image saving function is equivalent to the official ComfyUI "SaveImage" node.  
+This node saves images in PNG or WEBP format. The image saving function is equivalent to the official ComfyUI "SaveImage" node.  
 The parameters_data widget is optional, and when the parameters_data from LoadSetParameters node is connected, it is stored in the image as metadata.  
+The “level_or_method” widget allows you to select a processing level from 1 to 9 for PNG and a method from 1 to 6 for WEBP. For WEBP, any number above 7 is considered 6.  
+
 　  
 #### CombineParamData node  
 
