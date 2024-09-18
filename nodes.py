@@ -1,6 +1,7 @@
 import torch
 import toml
 import os
+import glob
 import comfy.sd
 import comfy.utils
 import comfy.lora
@@ -14,9 +15,7 @@ import numpy as np
 import json
 from comfy.cli_args import args
 from nodes import LoraLoader
-
 from .utils import extractLoras, getNewTomlnameExt, load_lora_for_models, runNegpip
-
 
 routes = PromptServer.instance.routes
 @routes.post('/mittimi_path')
@@ -25,15 +24,16 @@ async def my_function(request):
     LoadSetParamMittimi.handle_my_message(the_data)
     return web.json_response({})
 
-
 my_directory_path = os.path.dirname((os.path.abspath(__file__)))
 presets_directory_path = os.path.join(my_directory_path, "presets")
-preset_list = [f for f in os.listdir(presets_directory_path) if os.path.isfile(os.path.join(presets_directory_path, f))]
+preset_list = []
+tmp_list = []
+tmp_list += glob.glob(f"{presets_directory_path}/**/*.toml", recursive=True)
+for l in tmp_list:
+    preset_list.append(os.path.relpath(l, presets_directory_path))
 if len(preset_list) > 1: preset_list.sort()
-
 vae_new_list = folder_paths.get_filename_list("vae")
 vae_new_list.insert(0,"Use_merged_vae")
-
 
 class LoadSetParamMittimi:
 
@@ -74,7 +74,7 @@ class LoadSetParamMittimi:
     NAME = "name"
 
     def loadAndSettingParameters03(self, checkpoint, ClipNum, vae, PosPromptA, PosPromptB, PosPromptC, NegPromptA, NegPromptB, NegPromptC, Width, Height, BatchSize, Steps, CFG, SamplerName, Scheduler, Seed, node_id, preset=[], ):
-        
+ 
         ckpt_path = folder_paths.get_full_path("checkpoints", checkpoint)
         out3 = comfy.sd.load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, embedding_directory=folder_paths.get_folder_paths("embeddings"))
         re_ckpt = out3[0]
@@ -106,7 +106,6 @@ class LoadSetParamMittimi:
         
         if len(poslora):
             for lora in poslora:
-                
                 if lora['vector']:
                     re_ckpt, re_clip, populated_vector = load_lora_for_models(re_ckpt, re_clip, lora['fullpath'], lora['strength'], lora['strength'], Seed, lora['vector'])
                 else:
@@ -142,7 +141,7 @@ class LoadSetParamMittimi:
             } )
         
         return(re_ckpt, re_clip, re_vae, [[poscond, posoutput]], [[negcond, negoutput]], postxt, negcombtxt, {"samples":Latent}, Steps, CFG, SamplerName, Scheduler, Seed, parameters_data, )
-    
+
     def handle_my_message(d):
         
         preset_data = ""
@@ -150,7 +149,6 @@ class LoadSetParamMittimi:
         with open(preset_path, 'r') as f:
             preset_data = toml.load(f)
         PromptServer.instance.send_sync("my.custom.message", {"message":preset_data, "node":d['node_id']})
-        
 
 class CombineParamDataMittimi:
     @classmethod
@@ -176,22 +174,29 @@ class CombineParamDataMittimi:
         
         return(return_param, )
 
-
 class SaveImageParamMittimi:
+
     def __init__(self):
         self.output_dir = folder_paths.get_output_directory()
         self.type = "output"
         self.prefix_append = ""
         self.compress_level = 4
-
+        
     @classmethod
     def INPUT_TYPES(s):
+
+        file_type = ['PNG', 'WEBP']
+        
         return {
             "required": {
                 "images": ("IMAGE", ),
                 "filename_prefix": ("STRING", {"default": "ComfyUI"}),
+                "type": (file_type, ),
+                "level_or_method": ("INT", {"default":6, "min":1, "max":9}),
+                "lossless": ("BOOLEAN", {"default":True}),
             },
             "optional": {
+                "quality": ("INT", {"default": 80, "min": 1, "max": 100}),
                 "parameters_data": ("PDATA", ),
             },
             "hidden": {
@@ -205,51 +210,71 @@ class SaveImageParamMittimi:
     FUNCTION = "saveimageMittimi"
     CATEGORY = "mittimiTools"
 
-    def saveimageMittimi(self, images, filename_prefix, parameters_data=None, prompt=None, extra_pnginfo=None, ):
+    def saveimageMittimi(self, images, filename_prefix, type, level_or_method, lossless, quality=80, parameters_data=None, prompt=None, extra_pnginfo=None, ):
         
         filename_prefix += self.prefix_append
         full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, images[0].shape[1], images[0].shape[0])
         results = list()
-        seed_counter = 0
         bseed = 0
-        if parameters_data: bseed = parameters_data[0]['seed'] if "seed" in parameters_data[0] else 0
+        if parameters_data:
+            bseed = parameters_data[0]['seed'] if "seed" in parameters_data[0] else 0
+        bseed = "_"+str(bseed) if bseed>0 else ""
 
         for (batch_number, image) in enumerate(images):
             i = 255. * image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
-            metadata = None
-            if not args.disable_metadata:
-                metadata = PngInfo()
-                if parameters_data is not None:
-                    
-                    parameters_text = ""
-                    param_counter = 0
-                    for pd in parameters_data:
-                        if param_counter > 0: parameters_text += "\n\n"
-                        parameters_text += f"{pd['posA']+pd['posB']+pd['posC']}\nNegative prompt: {pd['negA']+pd['negB']+pd['negC']}\nSteps: {pd['step']}, Sampler: {pd['sampler']}, Scheduler: {pd['scheduler']}, CFG Scale: {pd['cfg']}, Seed: {pd['seed']+seed_counter}, Size: {pd['width']}x{pd['height']}, Model hash: {pd['hash']}, Model: {pd['checkpoint']}, Clip: {pd['clip']}, VAE: {pd['vae']}"
-                        param_counter += 1
-                    parameters_text += ", Version: ComfyUI"
-                    metadata.add_text("parameters", parameters_text)
-                    
+            
+            parameters_text = ""
+
+            if parameters_data is not None:
+                param_counter = 0
+                for pd in parameters_data:
+                    if param_counter > 0: parameters_text += "\n\n"
+                    parameters_text += f"{pd['posA']+pd['posB']+pd['posC']}\nNegative prompt: {pd['negA']+pd['negB']+pd['negC']}\nSteps: {pd['step']}, Sampler: {pd['sampler']}, Scheduler: {pd['scheduler']}, CFG Scale: {pd['cfg']}, Seed: {pd['seed']}, Batch count: {batch_number}, Size: {pd['width']}x{pd['height']}, Model hash: {pd['hash']}, Model: {pd['checkpoint']}, Clip: {pd['clip']}, VAE: {pd['vae']}"
+                    param_counter += 1
+                parameters_text += ", Version: ComfyUI"
+                
+            filename_with_batch_num = filename.replace("%batch_num%", str(batch_number))
+            rseed = bseed if batch_number == 0 else f"{bseed}_{batch_number:03}"
+            
+            if type =="WEBP":
+                
+                metadata = img.getexif()
+                metadata[270] = f"parameters:{parameters_text}"
+                
+                if prompt is not None:
+                    metadata[272] = "prompt:{}".format(json.dumps(prompt))
+
+                if extra_pnginfo is not None:
+                    for x in extra_pnginfo:
+                        metadata[271] = "{}:{}".format(x, json.dumps(extra_pnginfo[x]))
+                        
+                file = f"{filename_with_batch_num}_{counter:05}{rseed}.webp"
+                method = level_or_method if level_or_method <7 else 6
+                img.save(os.path.join(full_output_folder, file), "webp", exif=metadata, lossless=lossless, quality=quality, method=method)
+            
+            else:
+                metadata = None
+                if not args.disable_metadata:
+                    metadata = PngInfo()
+                metadata.add_text("parameters", parameters_text)
                 if prompt is not None:
                     metadata.add_text("prompt", json.dumps(prompt))
                 if extra_pnginfo is not None:
                     for x in extra_pnginfo:
                         metadata.add_text(x, json.dumps(extra_pnginfo[x]))
+                
+                file = f"{filename_with_batch_num}_{counter:05}{rseed}.png"
+                img.save(os.path.join(full_output_folder, file), pnginfo=metadata, compress_level=level_or_method)
 
-            filename_with_batch_num = filename.replace("%batch_num%", str(batch_number))
-            file = f"{filename_with_batch_num}_{counter:05}_{seed_counter + bseed}.png"
-            img.save(os.path.join(full_output_folder, file), pnginfo=metadata, compress_level=self.compress_level)
             results.append({
                 "filename": file,
                 "subfolder": subfolder,
                 "type": self.type
             })
             counter += 1
-            seed_counter += 1
 
         return { "ui": { "images": results } }
-
 
 class SaveParamToPresetMittimi:
     @classmethod
@@ -289,12 +314,14 @@ class SaveParamToPresetMittimi:
         tomltext += f"Scheduler = \"{param[0]['scheduler']}\"\n"
         
         tomlnameExt = getNewTomlnameExt(tomlname, presets_directory_path, savetype)
+        
+        check_folder_path = os.path.dirname(f"{presets_directory_path}/{tomlnameExt}")
+        os.makedirs(check_folder_path, exist_ok=True)
 
         with open(f"{presets_directory_path}/{tomlnameExt}", mode='w') as f:
             f.write(tomltext)
 
         return()
-
 
 NODE_CLASS_MAPPINGS = {
     "LoadSetParamMittimi": LoadSetParamMittimi,

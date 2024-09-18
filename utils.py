@@ -6,7 +6,6 @@ import comfy.lora
 import numpy as np
 import importlib.util
 
-
 is_negpip = False
 negpipfile_path = os.path.join(os.path.dirname(__file__), "..", "ComfyUI-ppm/clip_negpip.py")
 try:
@@ -17,16 +16,14 @@ try:
 except:
     print("No Negpip.")
 
-
 def runNegpip(self, ckpt, clip):
 
     if not is_negpip:
         return ckpt, clip
     
     re_ckpt, re_clip = negpip_module.CLIPNegPip.patch(self, ckpt, clip)
-
+    
     return re_ckpt, re_clip
-
 
 def getLbwPresets():
 
@@ -45,16 +42,16 @@ def getLbwPresets():
                     if len(l) > 1:
                         if l[0] not in presets:
                             presets[l[0]] = l[1]
+        else:
+            print("")
 
     return presets
-
 
 def is_numeric_string(input_str):
     return re.match(r'^-?\d+(\.\d+)?$', input_str) is not None
 
-
 def validate(vectors):
-
+    
     if len(vectors) < 12:
         return False
     
@@ -69,7 +66,6 @@ def validate(vectors):
                     return False
 
     return True
-
 
 def convert_vector_value(vector_value):
 
@@ -95,7 +91,6 @@ def convert_vector_value(vector_value):
 
     return ratios
 
-
 def norm_value(value):
     if value == 1:
         return 1
@@ -104,9 +99,8 @@ def norm_value(value):
     else:
         return value
     
-
 def extractLoras(prompt):
-
+    
     pattern = "<lora:([^:>]*?)(?::(-?\d*(?:\.\d*)?))?(?::lbw=([^:>]*))?(?::(start|stop|step)=(-?\d+(?:-\d+)?))?>"
     loras_folder_path = folder_paths.folder_names_and_paths["loras"][0][0]
     types = folder_paths.folder_names_and_paths["loras"][1]
@@ -116,6 +110,7 @@ def extractLoras(prompt):
     matches = re.findall(pattern, prompt)
     
     for match in matches:
+        
         lora_name_noext = ""
         lora_path = ""
         lora_fullpath = ""
@@ -141,15 +136,19 @@ def extractLoras(prompt):
                     for t in types:
                         if split_extension[1] == t:
                             lpaths.append(l)
+                            
             if lpaths:
                 lora_fullpath = lpaths[0]
                 
                 lora_path = os.path.relpath(lora_fullpath, loras_folder_path)
                 if lora_path.startswith('/'): lora_path = lora_path[1:]
+                
                 lbw_match = match[2] if match[2] else ""
                 if lbw_match:
                     lbw_vector = lbw_match.split(",")
+                    
                     if not validate(lbw_vector):
+                        
                         if len(lbw_vector) > 0:
                             vk = lbw_vector[0].strip()
                             if vk in lbw_presets:
@@ -166,16 +165,16 @@ def extractLoras(prompt):
 
     return (re.sub(pattern, '', prompt), loras)
 
-
 def load_lora_for_models(model, clip, lora_fullpath, strength_model, strength_clip, seed, vector):
     
     lora_torch = None
-    lora_torch = comfy.utils.load_torch_file(lora_fullpath, safe_load=True)  
+    lora_torch = comfy.utils.load_torch_file(lora_fullpath, safe_load=True)   
     key_map = comfy.lora.model_lora_keys_unet(model.model)
     key_map = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, key_map)
     loaded = comfy.lora.load_lora(lora_torch, key_map)
-
+    
     vector_i = 1
+
     last_k_unet_num = None
     new_modelpatcher = model.clone()
     populated_ratio = strength_model
@@ -204,11 +203,11 @@ def load_lora_for_models(model, clip, lora_fullpath, strength_model, strength_cl
             output_blocks.append((k, v, parse_unet_num(k_unet_num), k_unet))
         else:
             others.append((k, v, k_unet))
-
+            
     input_blocks = sorted(input_blocks, key=lambda x: x[2])
     middle_blocks = sorted(middle_blocks, key=lambda x: x[2])
     output_blocks = sorted(output_blocks, key=lambda x: x[2])
-
+    
     np.random.seed(seed % (2**31))
     populated_vector_list = []
     ratios = []
@@ -228,6 +227,7 @@ def load_lora_for_models(model, clip, lora_fullpath, strength_model, strength_cl
             populated_ratio = ratio
 
         last_k_unet_num = k_unet_num
+
         new_modelpatcher.add_patches({k: v}, strength_model * populated_ratio)
 
     ratios = convert_vector_value(vector[0].strip())
@@ -244,13 +244,17 @@ def load_lora_for_models(model, clip, lora_fullpath, strength_model, strength_cl
     populated_vector = ','.join(map(str, populated_vector_list))
     return (new_modelpatcher, new_clip, populated_vector)
 
-
 def getNewTomlnameExt(tomlname, folderpath, savetype):
 
     tomlnameExt = tomlname + ".toml"
     
     if savetype == "new save":
-        filename_list = [f for f in os.listdir(folderpath) if os.path.isfile(os.path.join(folderpath, f))]
+
+        filename_list = []
+        tmp_list = []
+        tmp_list += glob.glob(f"{folderpath}/**/*.toml", recursive=True)
+        for l in tmp_list:
+            filename_list.append(os.path.relpath(l, folderpath))
         
         duplication_flag = False
         for f in filename_list:
@@ -265,5 +269,5 @@ def getNewTomlnameExt(tomlname, folderpath, savetype):
                     tomlnameExt = new_tomlnameExt
                     duplication_flag = False
                 count += 1
-        
-        return tomlnameExt
+                
+    return tomlnameExt
