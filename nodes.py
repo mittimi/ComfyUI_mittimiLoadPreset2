@@ -59,7 +59,7 @@ class LoadSetParamMittimi:
                 "Height": ("INT", {"default": 512, "min": 8, "max": 16384}),
                 "BatchSize": ("INT", {"default": 1, "min": 1, "max": 999999}),
                 "Steps": ("INT", {"default": 20, "min": 1, "max": 999999}),
-                "CFG": ("FLOAT", ),
+                "CFG": ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "step": 0.5, "round": 0.01}),
                 "SamplerName": (comfy.samplers.KSampler.SAMPLERS,),
                 "Scheduler": (comfy.samplers.KSampler.SCHEDULERS,),
                 "Seed": ("INT", {"default": 1}),
