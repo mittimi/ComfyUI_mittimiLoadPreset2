@@ -41,7 +41,7 @@ app.registerExtension({
                     
                     node.widgets[1].value = (event.detail.message['CheckpointName'])?event.detail.message['CheckpointName']:"no checkpoint";
                     node.widgets[2].value = (event.detail.message['ClipSet'])?event.detail.message['ClipSet']:"-1";
-                    node.widgets[3].value = (event.detail.message['VAE'])?event.detail.message['VAE']:"Use_merged_checkpoints";
+                    node.widgets[3].value = (event.detail.message['VAE'])?event.detail.message['VAE']:"Use_merged_vae";
                     node.widgets[4].value = (event.detail.message['PositivePromptA'])?event.detail.message['PositivePromptA']:"";
                     node.widgets[5].value = (event.detail.message['PositivePromptB'])?event.detail.message['PositivePromptB']:"";
                     node.widgets[6].value = (event.detail.message['PositivePromptC'])?event.detail.message['PositivePromptC']:"";
