@@ -9,13 +9,15 @@ import folder_paths
 import hashlib
 from server import PromptServer
 from aiohttp import web
-from PIL import Image
+from PIL import Image, ImageOps, ImageSequence
 from PIL.PngImagePlugin import PngInfo
 import numpy as np
 import json
 from comfy.cli_args import args
 from nodes import LoraLoader
 from .utils import extractLoras, getNewTomlnameExt, load_lora_for_models, runNegpip
+import node_helpers
+
 
 routes = PromptServer.instance.routes
 @routes.post('/mittimi_path')
@@ -23,6 +25,7 @@ async def my_function(request):
     the_data = await request.post()
     LoadSetParamMittimi.handle_my_message(the_data)
     return web.json_response({})
+
 
 my_directory_path = os.path.dirname((os.path.abspath(__file__)))
 presets_directory_path = os.path.join(my_directory_path, "presets")
@@ -34,6 +37,7 @@ for l in tmp_list:
 if len(preset_list) > 1: preset_list.sort()
 vae_new_list = folder_paths.get_filename_list("vae")
 vae_new_list.insert(0,"Use_merged_vae")
+
 
 class LoadSetParamMittimi:
 
@@ -59,7 +63,7 @@ class LoadSetParamMittimi:
                 "Height": ("INT", {"default": 512, "min": 8, "max": 16384}),
                 "BatchSize": ("INT", {"default": 1, "min": 1, "max": 999999}),
                 "Steps": ("INT", {"default": 20, "min": 1, "max": 999999}),
-                "CFG": ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "step": 0.5, "round": 0.01}),
+                "CFG": ("FLOAT", ),
                 "SamplerName": (comfy.samplers.KSampler.SAMPLERS,),
                 "Scheduler": (comfy.samplers.KSampler.SCHEDULERS,),
                 "Seed": ("INT", {"default": 1}),
@@ -74,17 +78,17 @@ class LoadSetParamMittimi:
     NAME = "name"
 
     def loadAndSettingParameters03(self, checkpoint, ClipNum, vae, PosPromptA, PosPromptB, PosPromptC, NegPromptA, NegPromptB, NegPromptC, Width, Height, BatchSize, Steps, CFG, SamplerName, Scheduler, Seed, node_id, preset=[], ):
- 
+
         ckpt_path = folder_paths.get_full_path("checkpoints", checkpoint)
         out3 = comfy.sd.load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, embedding_directory=folder_paths.get_folder_paths("embeddings"))
         re_ckpt = out3[0]
         re_vae = out3[2]
-        
+
         sha256_hash = hashlib.sha256()
         with open(ckpt_path, "rb") as f:
             for byte_block in iter(lambda: f.read(4096), b""):
                 sha256_hash.update(byte_block)
-        model_hash = sha256_hash.hexdigest()[:10]
+        c_hash = sha256_hash.hexdigest()[:10]
         
         re_clip = out3[1].clone()
         re_clip.clip_layer(ClipNum)
@@ -121,7 +125,7 @@ class LoadSetParamMittimi:
         parameters_data = []
         parameters_data.append( {
             'checkpoint':checkpoint, 
-            'hash':model_hash, 
+            'hash':c_hash, 
             'clip':ClipNum, 
             'vae':vae, 
             'posA':PosPromptA,
@@ -139,7 +143,7 @@ class LoadSetParamMittimi:
             'scheduler':Scheduler, 
             'seed':Seed, 
             } )
-        
+            
         return(re_ckpt, re_clip, re_vae, [[poscond, posoutput]], [[negcond, negoutput]], postxt, negcombtxt, {"samples":Latent}, Steps, CFG, SamplerName, Scheduler, Seed, parameters_data, )
 
     def handle_my_message(d):
@@ -149,6 +153,7 @@ class LoadSetParamMittimi:
         with open(preset_path, 'r') as f:
             preset_data = toml.load(f)
         PromptServer.instance.send_sync("my.custom.message", {"message":preset_data, "node":d['node_id']})
+
 
 class CombineParamDataMittimi:
     @classmethod
@@ -174,6 +179,7 @@ class CombineParamDataMittimi:
         
         return(return_param, )
 
+
 class SaveImageParamMittimi:
 
     def __init__(self):
@@ -185,8 +191,7 @@ class SaveImageParamMittimi:
     @classmethod
     def INPUT_TYPES(s):
 
-        file_type = ['PNG', 'WEBP']
-        
+        file_type = ['PNG', 'WEBP']        
         return {
             "required": {
                 "images": ("IMAGE", ),
@@ -197,7 +202,8 @@ class SaveImageParamMittimi:
             },
             "optional": {
                 "quality": ("INT", {"default": 80, "min": 1, "max": 100}),
-                "parameters_data": ("PDATA", ),
+                "parameters_data": ("PDATA", ), 
+                "add_text": ("STRING", ),
             },
             "hidden": {
                 "prompt": "PROMPT",
@@ -210,7 +216,7 @@ class SaveImageParamMittimi:
     FUNCTION = "saveimageMittimi"
     CATEGORY = "mittimiTools"
 
-    def saveimageMittimi(self, images, filename_prefix, type, level_or_method, lossless, quality=80, parameters_data=None, prompt=None, extra_pnginfo=None, ):
+    def saveimageMittimi(self, images, filename_prefix, type, level_or_method, lossless, quality=80, parameters_data=None, add_text="", prompt=None, extra_pnginfo=None, ):
         
         filename_prefix += self.prefix_append
         full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, images[0].shape[1], images[0].shape[0])
@@ -225,6 +231,9 @@ class SaveImageParamMittimi:
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
             
             parameters_text = ""
+
+            if add_text != "":
+                parameters_text += f"{add_text}\n\n"
 
             if parameters_data is not None:
                 param_counter = 0
@@ -275,6 +284,7 @@ class SaveImageParamMittimi:
             counter += 1
 
         return { "ui": { "images": results } }
+    
 
 class SaveParamToPresetMittimi:
     @classmethod
@@ -323,15 +333,110 @@ class SaveParamToPresetMittimi:
 
         return()
 
+
+class LoadImageParamMittimi:
+    @classmethod
+    def INPUT_TYPES(s):
+        input_dir = folder_paths.get_input_directory()
+        files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
+        files = folder_paths.filter_files_content_types(files, ["image"])
+        return {"required":
+                {"image": (sorted(files), {"image_upload": True}), },                
+                }
+    
+    CATEGORY = "mittimiTools"
+
+    RETURN_TYPES = ("IMAGE", "MASK", "INT", "INT", "STRING", )
+    RETURN_NAMES = ("image", "mask", "width", "height", "parameters_text", )
+    FUNCTION = "loadimageParamMittimi"
+
+    def loadimageParamMittimi(self, image, ):
+
+        image_path = folder_paths.get_annotated_filepath(image)
+        img = node_helpers.pillow(Image.open, image_path)
+
+        parameters = ""
+
+        if img.format == "PNG":
+            print("It's PNG.")
+            png_info = img.info
+            if png_info is not None:
+                print("info founded.")
+                parameters = png_info.get('parameters',"")
+        
+        elif img.format == 'WEBP':
+            print("It's WEBP.")
+            webp_info = img.getexif()
+            parameters = webp_info.get(270,"").replace("parameters:", "", 1)
+        
+        output_images = []
+        output_masks = []
+        w, h = None, None
+
+        excluded_formats = ['MPO']
+
+        for i in ImageSequence.Iterator(img):
+            i = node_helpers.pillow(ImageOps.exif_transpose, i)
+
+            if i.mode == 'I':
+                i = i.point(lambda i: i * (1 / 255))
+            image = i.convert("RGB")
+
+            if len(output_images) == 0:
+                w = image.size[0]
+                h = image.size[1]
+            
+            if image.size[0] != w or image.size[1] != h:
+                continue
+
+            image = np.array(image).astype(np.float32) / 255.0
+            image = torch.from_numpy(image)[None,]
+            if 'A' in i.getbands():
+                mask = np.array(i.getchannel('A')).astype(np.float32) / 255.0
+                mask = 1. - torch.from_numpy(mask)
+            elif i.mode == 'P' and 'transparency' in i.info:
+                mask = np.array(i.convert('RGBA').getchannel('A')).astype(np.float32) /255.0
+                mask = 1. - torch.from_numpy(mask)
+            else:
+                mask = torch.zeros((64,64), dtype=torch.float32, device="cpu")
+            output_images.append(image)
+            output_masks.append(mask.unsqueeze(0))
+        
+        if len(output_images) > 1 and img.format not in excluded_formats:
+            output_image = torch.cat(output_images, dim=0)
+            output_mask = torch.cat(output_masks, dim=0)
+        else:
+            output_image = output_images[0]
+            output_mask = output_masks[0]
+        
+        return (output_image, output_mask, w, h, parameters, )
+    
+    @classmethod
+    def IS_CHANGED(s, image, ):
+        image_path = folder_paths.get_annotated_filepath(image)
+        m = hashlib.sha256()
+        with open(image_path, 'rb') as f:
+            m.update(f.read())
+        return m.digest().hex()
+
+    @classmethod
+    def VALIDATE_INPUTS(s, image, ):
+        if not folder_paths.exists_annotated_filepath(image):
+            return "Invalid image file: {}".format(image)
+        return True
+
+
 NODE_CLASS_MAPPINGS = {
     "LoadSetParamMittimi": LoadSetParamMittimi,
     "SaveImageParamMittimi": SaveImageParamMittimi,
     "CombineParamDataMittimi": CombineParamDataMittimi,
     "SaveParamToPresetMittimi": SaveParamToPresetMittimi,
+    "LoadImageParamMittimi": LoadImageParamMittimi,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadSetParamMittimi": "LoadSetParameters",
     "SaveImageParamMittimi": "SaveImageWithParamText",
     "CombineParamDataMittimi": "CombineParamData",
     "SaveParamToPresetMittimi": "SaveParamToPreset",
+    "LoadImageParamMittimi": "LoadImageParam"
 }
