@@ -66,7 +66,7 @@ class LoadSetParamMittimi:
                 "CFG": ("FLOAT", ),
                 "SamplerName": (comfy.samplers.KSampler.SAMPLERS,),
                 "Scheduler": (comfy.samplers.KSampler.SCHEDULERS,),
-                "Seed": ("INT", {"default": 1}),
+                "Seed": ("INT", {"default": 1, "min": 0, "max": 0xffffffffffffffff}),
             },
             "hidden": {"node_id": "UNIQUE_ID" }
         }
