@@ -15,7 +15,7 @@ import numpy as np
 import json
 from comfy.cli_args import args
 from nodes import LoraLoader
-from .utils import extractLoras, getNewTomlnameExt, load_lora_for_models, runNegpip
+from .utils import extractLoras, getNewTomlnameExt, load_lora_for_models, runNegpip, convert_backslashes_anglebrackets
 import node_helpers
 
 
@@ -306,12 +306,17 @@ class SaveParamToPresetMittimi:
     
     def saveparamtopresetMittimi(self, param, tomlname, savetype, ):
 
-        tomltext = f"CheckpointName = \"{param[0]['checkpoint']}\"\n"
+        reCheckpointname = param[0]['checkpoint'].replace('\\','\\\\')
+        rePosProA = convert_backslashes_anglebrackets(param[0]['posA'])
+        rePosProB = convert_backslashes_anglebrackets(param[0]['posB'])
+        rePosProC = convert_backslashes_anglebrackets(param[0]['posC'])
+
+        tomltext = f"CheckpointName = \"{reCheckpointname}\"\n"
         tomltext += f"ClipSet = {param[0]['clip']}\n"
         tomltext += f"VAE = \"{param[0]['vae']}\"\n"
-        tomltext += f"PositivePromptA = \"{param[0]['posA']}\"\n"
-        tomltext += f"PositivePromptB = \"{param[0]['posB']}\"\n"
-        tomltext += f"PositivePromptC = \"{param[0]['posC']}\"\n"
+        tomltext += f"PositivePromptA = \"{rePosProA}\"\n"
+        tomltext += f"PositivePromptB = \"{rePosProB}\"\n"
+        tomltext += f"PositivePromptC = \"{rePosProC}\"\n"
         tomltext += f"NegativePromptA = \"{param[0]['negA']}\"\n"
         tomltext += f"NegativePromptB = \"{param[0]['negB']}\"\n"
         tomltext += f"NegativePromptC = \"{param[0]['negC']}\"\n"
