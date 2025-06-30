@@ -271,3 +271,28 @@ def getNewTomlnameExt(tomlname, folderpath, savetype):
                 count += 1
                 
     return tomlnameExt
+
+def convert_backslashes_anglebrackets(s):
+
+    result = ''
+    inside = False
+    temp = ''
+
+    for c in s:
+        if c == '<':
+            inside = True
+            result += c
+        elif c == '>':
+            inside = False
+            result += temp + c
+            temp = ''
+        elif inside:
+            if c == '\\':
+                temp += '/'
+            else:
+                temp += c
+        else:
+            result += c
+
+    return result
+    
