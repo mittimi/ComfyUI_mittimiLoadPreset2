@@ -5,6 +5,24 @@ This node can easily switch between models and prompts by saving presets. Compat
 When using various types of models, isn't it troublesome to reset negative prompts and samplers every time you change models? With this node, you can instantly recall predefined prompts and parameters. Let’s take a look at how to use it.  
 　  
 
+=== note ===
+
+If RES4LYF is installed, it will not function properly. Adding the last three lines of the following code to RES4LYF's init.py will restore normal operation.
+
+new_scheduler_name = "bong_tangent"
+if new_scheduler_name not in SCHEDULER_HANDLERS:
+    bong_tangent_handler = SchedulerHandler(handler=sigmas.bong_tangent_scheduler, use_ms=True)
+    SCHEDULER_HANDLERS[new_scheduler_name] = bong_tangent_handler  
+    SCHEDULER_NAMES.append(new_scheduler_name)
+
+new_scheduler_name = "beta57"
+    if new_scheduler_name not in SCHEDULER_NAMES:
+    SCHEDULER_NAMES.append(new_scheduler_name)
+The source is as follows. ClownsharkBatwing/RES4LYF#161
+　  
+
+　  
+
 ## Usage
 ### 1) Create a Preset
 First, create preset data in advance. There are samples in the presets folder within the custom node, so please refer to those.
